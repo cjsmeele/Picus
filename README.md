@@ -8,6 +8,8 @@ Picus is a shell for the [Arduino Due](https://www.arduino.cc/en/Main/ArduinoBoa
 
 **TODO**
 
+![A screenshot of Picus in action](res/scrot.png?raw=true)
+
 ## Author ##
 
 [Chris Smeele](https://github.com/cjsmeele)
