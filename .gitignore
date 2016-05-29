@@ -1,0 +1,13 @@
+*.swp
+*\#*
+*~*
+.clang_complete
+/obj/
+/bin/
+/doc/
+tags
+/external-lib/*.a
+/external-include/mustore
+/external-include/sam/*
+/fs.img
+/fs
