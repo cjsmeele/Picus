@@ -41,6 +41,7 @@ class SdSpi : public MuBlockStore {
 
     uint8_t recv();
     void    recv(uint8_t *buffer, size_t length);
+    void    recvBlock(uint8_t *buffer, size_t length);
 
     uint8_t recvR1();
 

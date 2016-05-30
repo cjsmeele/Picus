@@ -96,7 +96,7 @@ PORT     ?= ttyACM0
 PORT_DEV ?= /dev/$(PORT)
 BAUDRATE ?= 115200
 
-UPLOAD_SSTY_FLAGS := raw ispeed 1200 ospeed 1200 cs8 -cstopb eol 255 eof 255 1200
+UPLOAD_STTY_FLAGS := raw ispeed 1200 ospeed 1200 cs8 -cstopb eol 255 eof 255 1200
 
 BOSSAFLAGS +=              \
 	--port=$(PORT)         \
@@ -114,7 +114,7 @@ all: $(BINFILE)
 install: upload
 
 upload: $(BINFILE)
-	stty -F $(PORT_DEV) $(UPLOAD_SSTY_FLAGS)
+	stty -F $(PORT_DEV) $(UPLOAD_STTY_FLAGS)
 	printf "\x00" > $(PORT_DEV)
 	$(BOSSAC) $(BOSSAFLAGS) $(BINFILE)
 

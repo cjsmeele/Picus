@@ -107,23 +107,32 @@ extern "C" int main() {
     Sleep(10);
 
     con->puts("\nPicus 0.1 alpha.\n");
-    con->puts(    "Copyright (c) 2016, Chris Smeele. All rights reserved.\n\n");
+    con->puts(  "Copyright (c) 2016, Chris Smeele. All rights reserved.\n\n");
 
     // (temporary)
     // Try to parse a FAT somewhere in flash storage.
-    size_t storeAddr = (0x80000 + 0x8000);
-    MuMemBlockStore store((const void*)storeAddr, 128*1024);
-    MuFatFs fs(&store);
+    // size_t storeAddr = (0x80000 + 0x8000);
+    // MuMemBlockStore store((const void*)storeAddr, 128*1024);
+    // MuFatFs fs(&store);
+
+    SdSpi sd;
+    MuFatFs fs(&sd);
 
     bool gotFat = fs.getFsSubType() != MuFatFs::SubType::NONE;
     if (gotFat) {
         // loseWeight();
-        con->printf("Got FAT%d filesystem '%s' in ramdisk @ %#08x\n\n",
-                (fs.getFsSubType() == MuFatFs::SubType::FAT12 ? 12 :
-                 fs.getFsSubType() == MuFatFs::SubType::FAT16 ? 16 :
-                 fs.getFsSubType() == MuFatFs::SubType::FAT32 ? 32 : 99),
-                fs.getVolumeLabel(),
-                storeAddr);
+        // con->printf("Got FAT%d filesystem '%s' in ramdisk @ %#08x\n\n",
+        //         (fs.getFsSubType() == MuFatFs::SubType::FAT12 ? 12 :
+        //          fs.getFsSubType() == MuFatFs::SubType::FAT16 ? 16 :
+        //          fs.getFsSubType() == MuFatFs::SubType::FAT32 ? 32 : 99),
+        //         fs.getVolumeLabel(),
+        //         storeAddr);
+        // con->printf("Got FAT%d filesystem '%s' in ramdisk @ %#08x\n\n",
+        con->printf("Got FAT%d filesystem '%s' on SPI SD card\n\n",
+                    (fs.getFsSubType() == MuFatFs::SubType::FAT12 ? 12 :
+                     fs.getFsSubType() == MuFatFs::SubType::FAT16 ? 16 :
+                     fs.getFsSubType() == MuFatFs::SubType::FAT32 ? 32 : 99),
+                    fs.getVolumeLabel());
 
         MuFsError err;
         auto root = fs.getRoot(err);
@@ -131,9 +140,25 @@ extern "C" int main() {
         if (err) {
             con->printf("err: %d\n", err);
         } else {
-            con->puts("dumping tree\n");
-            con->puts("/\n");
-            dumpTree(root, 1);
+            // con->puts("dumping tree\n");
+            // con->puts("/\n");
+            // dumpTree(root, 1);
+            MuFsNode issue = fs.get("/issue", err);
+            if (issue.doesExist()) {
+                char buf[16];
+                while (true) {
+                    size_t readBytes = issue.read(buf, 16, err);
+                    if (err && err != MUFS_EOF) {
+                        con->printf("err: %d\n", err);
+                        break;
+                    } else {
+                        for (size_t j = 0; j < readBytes; j++)
+                            con->putch(buf[j]);
+                        if (err == MUFS_EOF)
+                            break;
+                    }
+                }
+            }
         }
     }
 
@@ -146,8 +171,6 @@ extern "C" int main() {
     int  cmdInputI     = 0;
     int   argc         = 0;
     char *argv[16]     = { };
-
-    SdSpi sd;
 
     con->printf("\n%s:%s> ", fs.getVolumeLabel(), pwdPath);
 
