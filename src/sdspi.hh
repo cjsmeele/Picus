@@ -30,6 +30,8 @@ class SdSpi : public MuStore::Store {
         uint32_t arg;
     };
 
+    static const size_t cmdTimeoutClocks = 600;
+
     bool cardPresent = false;
     bool inited      = false;
 

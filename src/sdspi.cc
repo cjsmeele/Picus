@@ -86,7 +86,7 @@ uint8_t SdSpi::wait() {
     uint8_t  x = 0;
     uint32_t i = 0;
     do {
-        if (i++ > 800)
+        if (i++ > cmdTimeoutClocks)
             return x;
         SPI_Write(SPI0, 0, 0xff);
         x = (uint8_t)SPI_Read(SPI0);
@@ -109,7 +109,7 @@ StoreError SdSpi::recvBlock(uint8_t *buffer, size_t length) {
     uint8_t ch;
 
     do {
-        if (i++ > 600)
+        if (i++ > cmdTimeoutClocks)
             return STORE_ERR_IO;
         // Wait for start block token (0xfe).
     } while ((ch = recv()) != 0xfe);
@@ -125,8 +125,8 @@ uint8_t SdSpi::recvR1() {
     uint8_t  x = 0;
     uint32_t i = 0;
     do {
-        if (i++ > 200)
-            hang();
+        if (i++ > cmdTimeoutClocks)
+            return 0xff; // Invalid.
         SPI_Write(SPI0, 0, 0xff);
         x = (uint8_t)SPI_Read(SPI0);
 
@@ -303,10 +303,10 @@ SdSpi::SdSpi() {
     }
 
     // Wait for the card to leave idle state (wait for it to finish initializing).
-    int j = 300;
+    int j = cmdTimeoutClocks;
     do {
         if (j-- <= 0)
-            hang();
+            return;
         result = send(SdCommand{55, 0});
         result = send(SdCommand{41, 1UL << 30}); // Set the second highest bit to indicate SDHC/SDXC support.
     } while (result == 1);
