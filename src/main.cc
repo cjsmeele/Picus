@@ -21,8 +21,8 @@
 #include "sam.hh"
 
 #include "uartcon.hh"
-#include "mustore/mumemblockstore.hh"
-#include "mustore/mufatfs.hh"
+#include <mustore/memstore.hh>
+#include <mustore/fatfs.hh>
 #include <utility>
 #include "sdspi.hh"
 
@@ -30,7 +30,9 @@
 
 Console *con;
 
-static void dumpTree(MuFsNode &node, int level) {
+using namespace MuStore;
+
+static void dumpTree(FsNode &node, int level) {
     if (level > 8)
         return;
     char indent[8*2+1] = { };
@@ -39,10 +41,10 @@ static void dumpTree(MuFsNode &node, int level) {
         indent[i*2+1] = ' ';
     }
 
-    MuFsError err;
+    FsError err;
     while (true) {
-        MuFsNode child = node.readDir(err);
-        if (err == MUFS_EOF)
+        FsNode child = node.readDir(err);
+        if (err == FS_EOF)
             break;
         if (err) {
             con->printf("err: %d\n", err);
@@ -58,6 +60,16 @@ static void dumpTree(MuFsNode &node, int level) {
         } else {
             con->puts("\n");
         }
+    }
+}
+
+static void saveCommand(Fs &fs, const char *cmd) {
+    FsError err;
+    auto histfile = fs.get("/histfile", err);
+    if (histfile.doesExist()) {
+        histfile.seek(histfile.getSize());
+        histfile.write(cmd, strlen(cmd), err);
+        histfile.write("\n", 1, err); // Inefficient, but w/e.
     }
 }
 
@@ -106,35 +118,39 @@ extern "C" int main() {
 
     Sleep(10);
 
-    con->puts("\nPicus 0.1 alpha.\n");
-    con->puts(  "Copyright (c) 2016, Chris Smeele. All rights reserved.\n\n");
+    con->clear();
+
+    con->puts(
+        "Picus 0.1 alpha.\n"
+        "Copyright (c) 2016, Chris Smeele.\n"
+        "This is free software with ABSOLUTELY NO WARRANTY.\n\n"
+    );
 
     // (temporary)
     // Try to parse a FAT somewhere in flash storage.
     // size_t storeAddr = (0x80000 + 0x8000);
     // MuMemBlockStore store((const void*)storeAddr, 128*1024);
-    // MuFatFs fs(&store);
+    // FatFs fs(&store);
 
     SdSpi sd;
-    MuFatFs fs(&sd);
+    FatFs fs(&sd);
 
-    bool gotFat = fs.getFsSubType() != MuFatFs::SubType::NONE;
+    bool gotFat = fs.getFsSubType() != FatFs::SubType::NONE;
     if (gotFat) {
         // loseWeight();
         // con->printf("Got FAT%d filesystem '%s' in ramdisk @ %#08x\n\n",
-        //         (fs.getFsSubType() == MuFatFs::SubType::FAT12 ? 12 :
-        //          fs.getFsSubType() == MuFatFs::SubType::FAT16 ? 16 :
-        //          fs.getFsSubType() == MuFatFs::SubType::FAT32 ? 32 : 99),
+        //         (fs.getFsSubType() == FatFs::SubType::FAT12 ? 12 :
+        //          fs.getFsSubType() == FatFs::SubType::FAT16 ? 16 :
+        //          fs.getFsSubType() == FatFs::SubType::FAT32 ? 32 : 99),
         //         fs.getVolumeLabel(),
         //         storeAddr);
-        // con->printf("Got FAT%d filesystem '%s' in ramdisk @ %#08x\n\n",
-        con->printf("Got FAT%d filesystem '%s' on SPI SD card\n\n",
-                    (fs.getFsSubType() == MuFatFs::SubType::FAT12 ? 12 :
-                     fs.getFsSubType() == MuFatFs::SubType::FAT16 ? 16 :
-                     fs.getFsSubType() == MuFatFs::SubType::FAT32 ? 32 : 99),
+        con->printf("Found FAT%d filesystem `%s' on SPI SD card\n\n",
+                    (fs.getFsSubType() == FatFs::SubType::FAT12 ? 12 :
+                     fs.getFsSubType() == FatFs::SubType::FAT16 ? 16 :
+                     fs.getFsSubType() == FatFs::SubType::FAT32 ? 32 : 99),
                     fs.getVolumeLabel());
 
-        MuFsError err;
+        FsError err;
         auto root = fs.getRoot(err);
 
         if (err) {
@@ -143,18 +159,18 @@ extern "C" int main() {
             // con->puts("dumping tree\n");
             // con->puts("/\n");
             // dumpTree(root, 1);
-            MuFsNode issue = fs.get("/issue", err);
-            if (issue.doesExist()) {
-                char buf[16];
+            FsNode banner = fs.get("/banner.txt", err);
+            if (banner.doesExist()) {
+                char buf[32];
                 while (true) {
-                    size_t readBytes = issue.read(buf, 16, err);
-                    if (err && err != MUFS_EOF) {
+                    size_t readBytes = banner.read(buf, 32, err);
+                    if (err && err != FS_EOF) {
                         con->printf("err: %d\n", err);
                         break;
                     } else {
                         for (size_t j = 0; j < readBytes; j++)
                             con->putch(buf[j]);
-                        if (err == MUFS_EOF)
+                        if (err == FS_EOF)
                             break;
                     }
                 }
@@ -162,8 +178,8 @@ extern "C" int main() {
         }
     }
 
-    MuFsError fsErr;
-    MuFsNode pwd = fs.getRoot(fsErr);
+    FsError fsErr;
+    FsNode pwd = fs.getRoot(fsErr);
     char pwdPath[256] = { };
     strncpy(pwdPath, pwd.getName(), 256);
 
@@ -172,7 +188,7 @@ extern "C" int main() {
     int   argc         = 0;
     char *argv[16]     = { };
 
-    con->printf("\n%s:%s> ", fs.getVolumeLabel(), pwdPath);
+    con->printf("%s:%s> ", fs.getVolumeLabel(), pwdPath);
 
     // Note: This mainloop was hacked together as a quick demo.
     // TODO: Rewrite this.
@@ -182,6 +198,8 @@ extern "C" int main() {
         if ((c = con->getch(false)) >= 0) {
             if (c == '\r' || c == '\n') {
                 cmdInput[cmdInputI] = '\0';
+                if (cmdInputI)
+                    saveCommand(fs, cmdInput);
                 argc = 0;
                 bool inPart = false;
                 for (int i = 0; i < cmdInputI; i++) {
@@ -205,7 +223,8 @@ extern "C" int main() {
                         con->puts("Hello, world!\n");
                     } else if (!strcmp(argv[0], "spi")) {
                     } else if (!strcmp(argv[0], "cls") || !strcmp(argv[0], "clear")) {
-                        con->puts("\x1b[2J\x1b[0;0H");
+                        // con->puts("\x1b[2J\x1b[0;0H");
+                        con->clear();
                     } else if (!strcmp(argv[0], "echo")) {
                         for (int i = 1; i < argc; i++) {
                             if (i > 1)
@@ -260,7 +279,7 @@ extern "C" int main() {
                         size_t totalFiles = 0;
                         size_t totalDirs  = 0;
 
-                        MuFsNode node = pwd;
+                        FsNode node = pwd;
                         if (argc == 2) {
                             if (argv[1][0] == '/')
                                 node = fs.get(argv[1], fsErr);
@@ -270,8 +289,8 @@ extern "C" int main() {
                         if (node.isDirectory()) {
                             node.rewind();
                             while (true) {
-                                MuFsNode child = node.readDir(fsErr);
-                                if (fsErr == MUFS_EOF)
+                                FsNode child = node.readDir(fsErr);
+                                if (fsErr == FS_EOF)
                                     break;
                                 if (fsErr) {
                                     con->printf("err: %d\n", fsErr);
@@ -296,7 +315,7 @@ extern "C" int main() {
                     } else if (!strcmp(argv[0], "cat")) {
                         if (argc > 1) {
                             for (int i = 1; i < argc; i++) {
-                                MuFsNode node(&fs);
+                                FsNode node(&fs);
                                 if (argv[i][0] == '/') {
                                     node = fs.get(argv[i], fsErr);
                                 } else {
@@ -310,13 +329,13 @@ extern "C" int main() {
                                     char buffer[32] = { };
                                     while (true) {
                                         size_t readBytes = node.read(buffer, 32, fsErr);
-                                        if (fsErr && fsErr != MUFS_EOF) {
+                                        if (fsErr && fsErr != FS_EOF) {
                                             con->printf("err: %d\n", fsErr);
                                             break;
                                         } else {
                                             for (size_t j = 0; j < readBytes; j++)
                                                 con->putch(buffer[j]);
-                                            if (fsErr == MUFS_EOF)
+                                            if (fsErr == FS_EOF)
                                                 break;
                                         }
                                     }
@@ -326,7 +345,7 @@ extern "C" int main() {
                             con->printf("usage: cat FILE...\n");
                         }
                     } else {
-                        con->printf("No such command '%s'\n", argv[0]);
+                        con->printf("No such command `%s'\n", argv[0]);
                     }
                 }
                 con->printf("%s:%s> ", fs.getVolumeLabel(), pwdPath);

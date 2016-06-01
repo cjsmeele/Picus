@@ -39,6 +39,8 @@ public:
     void putch(char ch);
     int getch(bool block = true);
 
+    void clear();
+
     static SamUartConsole &getInstance();
 
     SamUartConsole(SamUartConsole const&) = delete;

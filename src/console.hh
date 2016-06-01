@@ -30,6 +30,8 @@ public:
     virtual void puts(const char *s);
     virtual int getch(bool block = true) = 0;
 
+    virtual void clear();
+
     int printf(const char *fmt, ...);
 
     Console() = default;

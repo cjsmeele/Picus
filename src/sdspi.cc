@@ -28,6 +28,8 @@
 
 extern Console *con; // XXX: For debugging purposes.
 
+using namespace MuStore;
+
 /**
  * \brief SD Card-Specific Data structure.
  *
@@ -87,7 +89,7 @@ uint8_t SdSpi::wait() {
     uint8_t  x = 0;
     uint32_t i = 0;
     do {
-        if (i++ > 200)
+        if (i++ > 800)
             return x;
         SPI_Write(SPI0, 0, 0xff);
         x = (uint8_t)SPI_Read(SPI0);
@@ -105,17 +107,20 @@ void SdSpi::recv(uint8_t *buffer, size_t length) {
         buffer[i] = recv();
 }
 
-void SdSpi::recvBlock(uint8_t *buffer, size_t length) {
+StoreError SdSpi::recvBlock(uint8_t *buffer, size_t length) {
     size_t i = 0;
     uint8_t ch;
+
     do {
         if (i++ > 600)
-            hang();
+            return STORE_ERR_IO;
         // Wait for start block token (0xfe).
     } while ((ch = recv()) != 0xfe);
 
     for (i = 0; i < length; i++)
         buffer[i] = recv();
+
+    return STORE_ERR_OK;
 }
 
 uint8_t SdSpi::recvR1() {
@@ -168,29 +173,51 @@ uint8_t SdSpi::send(SdCommand cmd) {
     return recvR1();
 }
 
-MuBlockStoreError SdSpi::seek(size_t lba) {
+StoreError SdSpi::sendBlock(const uint8_t *buffer, size_t length) {
+    if (wait() != 0xff)
+        return STORE_ERR_IO;
+
+    send(0xfe); // Data start token.
+
+    for (size_t i = 0; i < length; i++)
+        send(buffer[i]);
+
+    // CRC, unused.
+    send(0xff);
+    send(0xff);
+
+    uint8_t respToken = recv();
+    if ((respToken & 0x1f) == 0x05) {
+        // 'Data accepted'.
+        return STORE_ERR_OK;
+    } else {
+        return STORE_ERR_IO;
+    }
+}
+
+StoreError SdSpi::seek(size_t lba) {
     if (!cardPresent || !inited)
-        return MUBLOCKSTORE_ERR_IO;
+        return STORE_ERR_IO;
     if (lba >= blockCount)
-        return MUBLOCKSTORE_ERR_OUT_OF_BOUNDS;
+        return STORE_ERR_OUT_OF_BOUNDS;
 
     pos = lba;
 
-    return MUBLOCKSTORE_ERR_OK;
+    return STORE_ERR_OK;
 }
 
-MuBlockStoreError SdSpi::read(void *buffer) {
+StoreError SdSpi::read(void *buffer) {
     if (!cardPresent || !inited)
-        return MUBLOCKSTORE_ERR_IO;
+        return STORE_ERR_IO;
     if (pos >= blockCount)
-        return MUBLOCKSTORE_ERR_OUT_OF_BOUNDS;
+        return STORE_ERR_OUT_OF_BOUNDS;
 
     wait();
 
     // NOTE: SDHC/SDXC use LBAs, SDSC uses byte addresses.
-    uint8_t result = send(SdCommand{17, pos});
+    uint8_t result = send(SdCommand{17, (uint32_t)pos});
     if (result != 0) {
-        return MUBLOCKSTORE_ERR_IO;
+        return STORE_ERR_IO;
     }
     // con->printf("result16: <%02xh>\n", result);
     recvBlock((uint8_t*)buffer, blockSize);
@@ -201,32 +228,26 @@ MuBlockStoreError SdSpi::read(void *buffer) {
     recv();
     recv();
 
-    return MUBLOCKSTORE_ERR_OK;
-
-    // for (size_t i = 0; i < 32; i++) {
-    //     for (size_t j = 0; j < 16; j++) {
-    //         uint8_t ch = buffer[i*16 + j];
-    //         con->printf("%02x ", ch);
-    //     }
-    //     for (size_t j = 0; j < 16; j++) {
-    //         uint8_t ch = buffer[i*16 + j];
-    //         con->putch(
-    //             ch >= ' ' && ch <= '~'
-    //             ? ch : '.'
-    //         );
-    //     }
-    //     con->puts("\n");
-    // }
+    return STORE_ERR_OK;
 }
 
-MuBlockStoreError SdSpi::write(const void *buffer) {
+StoreError SdSpi::write(const void *buffer) {
     if (!cardPresent || !inited)
-        return MUBLOCKSTORE_ERR_IO;
+        return STORE_ERR_IO;
     if (pos >= blockCount)
-        return MUBLOCKSTORE_ERR_OUT_OF_BOUNDS;
+        return STORE_ERR_OUT_OF_BOUNDS;
 
-    // TODO.
-    return MUBLOCKSTORE_ERR_NOT_WRITABLE;
+    if (wait() != 0xff)
+        return STORE_ERR_IO;
+
+    uint8_t result = send(SdCommand{24, (uint32_t)pos});
+    if (result != 0) {
+        return STORE_ERR_IO;
+    }
+
+    pos++;
+
+    return sendBlock((uint8_t*)buffer, 512);
 }
 
 SdSpi::SdSpi() {

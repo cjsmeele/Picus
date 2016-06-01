@@ -30,6 +30,11 @@ void Console::puts(const char *s) {
         putch(*s++);
 }
 
+void Console::clear() {
+    for (int i = 0; i < 25; i++)
+        putch('\n');
+}
+
 // Note: The following printf code was originally from my Stoomboot project:
 // https://github.com/cjsmeele/stoomboot/blob/master/stage2/src/console.c
 // Not much was changed to make it work in this environment.

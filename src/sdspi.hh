@@ -21,9 +21,9 @@
  */
 #pragma once
 
-#include "mustore/mublockstore.hh"
+#include <mustore/store.hh>
 
-class SdSpi : public MuBlockStore {
+class SdSpi : public MuStore::Store {
 
     struct SdCommand {
         uint8_t  cmd;
@@ -38,21 +38,22 @@ class SdSpi : public MuBlockStore {
     uint8_t send(uint8_t byte);
     uint8_t send(uint8_t *buffer, size_t length);
     uint8_t send(SdCommand cmd);
+    MuStore::StoreError sendBlock(const uint8_t *buffer, size_t length);
 
     uint8_t recv();
     void    recv(uint8_t *buffer, size_t length);
-    void    recvBlock(uint8_t *buffer, size_t length);
+    MuStore::StoreError recvBlock(uint8_t *buffer, size_t length);
 
     uint8_t recvR1();
 
 public:
-    MuBlockStoreError seek(size_t lba);
+    MuStore::StoreError seek(size_t lba);
 
-    MuBlockStoreError read (void *buffer);
-    MuBlockStoreError write(const void *buffer);
+    MuStore::StoreError read (void *buffer);
+    MuStore::StoreError write(const void *buffer);
 
-    using MuBlockStore::read;
-    using MuBlockStore::write;
+    using Store::read;
+    using Store::write;
 
     SdSpi();
     ~SdSpi() = default;

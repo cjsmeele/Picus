@@ -81,6 +81,12 @@ int SamUartConsole::getch(bool block) {
     }
 }
 
+void SamUartConsole::clear() {
+    // Assume the terminal supports ECMA-48 CSI sequences.
+    puts( "\x1b[2J\x1b[1;1H");
+    // erase dpy ^        ^ move cursor to origin.
+}
+
 extern "C" void UART_Handler(void) {
     int c;
     SamUartConsole &con = SamUartConsole::getInstance();
