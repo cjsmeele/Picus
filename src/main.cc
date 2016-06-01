@@ -126,10 +126,8 @@ extern "C" int main() {
         "This is free software with ABSOLUTELY NO WARRANTY.\n\n"
     );
 
-    // (temporary)
     // Try to parse a FAT somewhere in flash storage.
-    // size_t storeAddr = (0x80000 + 0x8000);
-    // MuMemBlockStore store((const void*)storeAddr, 128*1024);
+    // MemStore store((const void*)(0x80000 + 0x8000), 128*1024);
     // FatFs fs(&store);
 
     SdSpi sd;
@@ -137,13 +135,6 @@ extern "C" int main() {
 
     bool gotFat = fs.getFsSubType() != FatFs::SubType::NONE;
     if (gotFat) {
-        // loseWeight();
-        // con->printf("Got FAT%d filesystem '%s' in ramdisk @ %#08x\n\n",
-        //         (fs.getFsSubType() == FatFs::SubType::FAT12 ? 12 :
-        //          fs.getFsSubType() == FatFs::SubType::FAT16 ? 16 :
-        //          fs.getFsSubType() == FatFs::SubType::FAT32 ? 32 : 99),
-        //         fs.getVolumeLabel(),
-        //         storeAddr);
         con->printf("Found FAT%d filesystem `%s' on SPI SD card\n\n",
                     (fs.getFsSubType() == FatFs::SubType::FAT12 ? 12 :
                      fs.getFsSubType() == FatFs::SubType::FAT16 ? 16 :
@@ -156,9 +147,6 @@ extern "C" int main() {
         if (err) {
             con->printf("err: %d\n", err);
         } else {
-            // con->puts("dumping tree\n");
-            // con->puts("/\n");
-            // dumpTree(root, 1);
             FsNode banner = fs.get("/banner.txt", err);
             if (banner.doesExist()) {
                 char buf[32];
@@ -223,7 +211,6 @@ extern "C" int main() {
                         con->puts("Hello, world!\n");
                     } else if (!strcmp(argv[0], "spi")) {
                     } else if (!strcmp(argv[0], "cls") || !strcmp(argv[0], "clear")) {
-                        // con->puts("\x1b[2J\x1b[0;0H");
                         con->clear();
                     } else if (!strcmp(argv[0], "echo")) {
                         for (int i = 1; i < argc; i++) {
@@ -233,7 +220,6 @@ extern "C" int main() {
                         }
                         con->putch('\n');
                     } else if (!strcmp(argv[0], "help")) {
-                        // con->puts("You're on your own, buddy\n");
                         con->printf("%8s %8s %8s %8s %8s\n"
                                     "%8s %8s %8s\n",
                                     "cat",
@@ -271,8 +257,6 @@ extern "C" int main() {
                         } else {
                             pwd = fs.getRoot(fsErr);
                             strcpy(pwdPath, "/");
-                        }
-                        if(!fsErr) {
                         }
                     } else if (!strcmp(argv[0], "dir") || !strcmp(argv[0], "ls")) {
                         size_t totalSize  = 0;

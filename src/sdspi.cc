@@ -20,13 +20,10 @@
  */
 #include "sam.hh"
 #include "sdspi.hh"
-#include "console.hh"
 
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
-
-extern Console *con; // XXX: For debugging purposes.
 
 using namespace MuStore;
 
@@ -219,7 +216,6 @@ StoreError SdSpi::read(void *buffer) {
     if (result != 0) {
         return STORE_ERR_IO;
     }
-    // con->printf("result16: <%02xh>\n", result);
     recvBlock((uint8_t*)buffer, blockSize);
 
     pos++;
@@ -263,18 +259,12 @@ SdSpi::SdSpi() {
     PIO_Configure(PIOA, PIO_PERIPH_A, PIO_PA27A_SPI0_SPCK,  PIO_DEFAULT);
 
     // Set SPI configuration parameters.
-	// con->puts("Config SPI\n");
     SPI_Configure(SPI0, ID_SPI0,
                   0x21         // WDRBT enabled, PS Fixed, Master.
                   | SPI_PCS(0) // Select first peripheral (NPCS0 - CS on Due pin 10).
                  );
 
-    // SPI_DLYBCT(0, SystemCoreClock)
-    // | SPI_DLYBS(0, SystemCoreClock)
-    // | SPI_SCBR(32, SystemCoreClock)
-
     // Configure SPI peripheral 0 (CS0).
-	// con->puts("Config NPCS\n");
     SPI_ConfigureNPCS(SPI0, 0,
                       // XXX: These clock values are just a guess but they seem to work for SD.
                       // TODO: Tune this for performance?
@@ -298,28 +288,19 @@ SdSpi::SdSpi() {
     if (result != 1)
         return;
 
-    // con->printf("result0:   <%02xh>\n", result);
-
     // Check if the card can handle our voltage levels.
     result = send(SdCommand{8, 0x1a5});
     if (result != 1)
         return;
-    // con->printf("result8:   <%02xh>\n", result); // 2.7 - 3.6V.
 
     {
         uint8_t cmd8Buf[4] = { };
         recv(cmd8Buf, 4);
-        // for (size_t i = 0; i < sizeof(cmd8Buf); i++)
-        //     con->printf("result8.%2d: <%02xh>\n", i, cmd8Buf[i]);
         if ((cmd8Buf[2] & 0x0f) != 1)
             return; // Voltage range unacceptable.
         if (cmd8Buf[3] != 0xa5)
             return; // Check pattern mismatch.
     }
-    // con->printf("result8.1: <%02xh>\n", recv());
-    // con->printf("result8.2: <%02xh>\n", recv());
-    // con->printf("result8.3: <%02xh>\n", recv());
-    // con->printf("result8.4: <%02xh>\n", recv());
 
     // Wait for the card to leave idle state (wait for it to finish initializing).
     int j = 300;
@@ -328,14 +309,12 @@ SdSpi::SdSpi() {
             hang();
         result = send(SdCommand{55, 0});
         result = send(SdCommand{41, 1UL << 30}); // Set the second highest bit to indicate SDHC/SDXC support.
-        // con->printf("result41: <%02xh>\n", result);
     } while (result == 1);
 
     // Get Card-Specific Data.
     result = send(SdCommand{9, 0});
     if (result != 0)
         return;
-    // con->printf("result9:   <%02xh>\n", send(SdCommand{9, 0}));
 
     SdCsd csd;
 
@@ -343,13 +322,11 @@ SdSpi::SdSpi() {
     // array instead. Meh.
     uint8_t *csdb = (uint8_t*)&csd;
     recvBlock(csdb, sizeof(csd));
-    // for (int i = 0; i < 16; i++)
-    //     con->printf("result9.%2d: <%02xh>\n", i, csdb[i]);
 
     if ((csdb[0] & 0xc0) == 0x40) {
         // con->printf("Card is of type SDHC/SDXC\n");
     } else {
-        con->printf("Card is of standard capacity (unimplemented)\n");
+        // con->printf("Card is of standard capacity (unimplemented)\n");
         return; // Currently no support for standard capacity.
     }
 
