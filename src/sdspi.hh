@@ -1,6 +1,6 @@
 /**
  * \file
- * \brief
+ * \brief     SD SPI Store provider.
  * \author    Chris Smeele
  * \copyright Copyright (c) 2016, Chris Smeele
  *

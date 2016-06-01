@@ -186,6 +186,9 @@ StoreError SdSpi::sendBlock(const uint8_t *buffer, size_t length) {
     uint8_t respToken = recv();
     if ((respToken & 0x1f) == 0x05) {
         // 'Data accepted'.
+        if (wait() != 0xff)
+            return STORE_ERR_IO;
+
         return STORE_ERR_OK;
     } else {
         return STORE_ERR_IO;
@@ -223,6 +226,9 @@ StoreError SdSpi::read(void *buffer) {
     // Receive and discard 16-bit CRC.
     recv();
     recv();
+
+    if (wait() != 0xff)
+        return STORE_ERR_IO;
 
     return STORE_ERR_OK;
 }
@@ -268,9 +274,9 @@ SdSpi::SdSpi() {
     SPI_ConfigureNPCS(SPI0, 0,
                       // XXX: These clock values are just a guess but they seem to work for SD.
                       // TODO: Tune this for performance?
-                        (uint32_t)8 << 24
-                      | (uint32_t)8 << 16
-                      | (uint32_t)8 << 8 // baud rate divisor thingy.
+                        (uint32_t)32 << 24
+                      | (uint32_t)32 << 16
+                      | (uint32_t)16 << 8 // baud rate divisor thingy.
                       | 0x2);            // CPOL = 0, NCHPA = 1
 
 	// con->puts("Enable SPI\n");

@@ -23,8 +23,8 @@
 #include "uartcon.hh"
 #include <mustore/memstore.hh>
 #include <mustore/fatfs.hh>
-#include <utility>
 #include "sdspi.hh"
+#include "shell.hh"
 
 #include <cstring>
 
@@ -60,16 +60,6 @@ static void dumpTree(FsNode &node, int level) {
         } else {
             con->puts("\n");
         }
-    }
-}
-
-static void saveCommand(Fs &fs, const char *cmd) {
-    FsError err;
-    auto histfile = fs.get("/histfile", err);
-    if (histfile.doesExist()) {
-        histfile.seek(histfile.getSize());
-        histfile.write(cmd, strlen(cmd), err);
-        histfile.write("\n", 1, err); // Inefficient, but w/e.
     }
 }
 
@@ -166,199 +156,7 @@ extern "C" int main() {
         }
     }
 
-    FsError fsErr;
-    FsNode pwd = fs.getRoot(fsErr);
-    char pwdPath[256] = { };
-    strncpy(pwdPath, pwd.getName(), 256);
-
-    char cmdInput[256] = { };
-    int  cmdInputI     = 0;
-    int   argc         = 0;
-    char *argv[16]     = { };
-
-    con->printf("%s:%s> ", fs.getVolumeLabel(), pwdPath);
-
-    // Note: This mainloop was hacked together as a quick demo.
-    // TODO: Rewrite this.
-    while (true) {
-        int c;
-
-        if ((c = con->getch(false)) >= 0) {
-            if (c == '\r' || c == '\n') {
-                cmdInput[cmdInputI] = '\0';
-                if (cmdInputI)
-                    saveCommand(fs, cmdInput);
-                argc = 0;
-                bool inPart = false;
-                for (int i = 0; i < cmdInputI; i++) {
-                    if (inPart) {
-                        if (cmdInput[i] == ' ') {
-                            cmdInput[i] = '\0';
-                            inPart = false;
-                            if (argc >= 15)
-                                break;
-                        }
-                    } else {
-                        if (cmdInput[i] != ' ') {
-                            inPart = true;
-                            argv[argc++] = cmdInput + i;
-                        }
-                    }
-                }
-                cmdInputI = 0;
-                if (argc && strlen(argv[0])) {
-                    if (!strcmp(argv[0], "hello")) {
-                        con->puts("Hello, world!\n");
-                    } else if (!strcmp(argv[0], "spi")) {
-                    } else if (!strcmp(argv[0], "cls") || !strcmp(argv[0], "clear")) {
-                        con->clear();
-                    } else if (!strcmp(argv[0], "echo")) {
-                        for (int i = 1; i < argc; i++) {
-                            if (i > 1)
-                                con->putch(' ');
-                            con->puts(argv[i]);
-                        }
-                        con->putch('\n');
-                    } else if (!strcmp(argv[0], "help")) {
-                        con->printf("%8s %8s %8s %8s %8s\n"
-                                    "%8s %8s %8s\n",
-                                    "cat",
-                                    "cd",
-                                    "cls",
-                                    "dir",
-                                    "echo",
-                                    "hello",
-                                    "help",
-                                    "pwd"
-                                   );
-                    } else if (!strcmp(argv[0], "pwd")) {
-                        con->printf("%s\n", pwdPath);
-                    } else if (!strcmp(argv[0], "cd")) {
-                        if (argc == 2) {
-                            if (argv[1][0] == '/') {
-                                auto node = fs.get(argv[1], fsErr);
-                                if (!fsErr && node.isDirectory()) {
-                                    pwd = std::move(node);
-                                    strncpy(pwdPath, argv[1], 255);
-                                } else {
-                                    con->printf("Path '%s' is not a directory\n", argv[1]);
-                                }
-                            } else {
-                                auto node = pwd.get(argv[1], fsErr);
-                                if (!fsErr && node.isDirectory()) {
-                                    pwd = std::move(node);
-                                    if (strcmp(pwdPath, "/"))
-                                        strncat(pwdPath, "/", 255);
-                                    strncat(pwdPath, argv[1], 255);
-                                } else {
-                                    con->printf("Path '%s' is not a directory\n", argv[1]);
-                                }
-                            }
-                        } else {
-                            pwd = fs.getRoot(fsErr);
-                            strcpy(pwdPath, "/");
-                        }
-                    } else if (!strcmp(argv[0], "dir") || !strcmp(argv[0], "ls")) {
-                        size_t totalSize  = 0;
-                        size_t totalFiles = 0;
-                        size_t totalDirs  = 0;
-
-                        FsNode node = pwd;
-                        if (argc == 2) {
-                            if (argv[1][0] == '/')
-                                node = fs.get(argv[1], fsErr);
-                            else
-                                node = pwd.get(argv[1], fsErr);
-                        }
-                        if (node.isDirectory()) {
-                            node.rewind();
-                            while (true) {
-                                FsNode child = node.readDir(fsErr);
-                                if (fsErr == FS_EOF)
-                                    break;
-                                if (fsErr) {
-                                    con->printf("err: %d\n", fsErr);
-                                    break;
-                                }
-
-                                con->printf("%13s", child.getName());
-                                if (child.isDirectory()) {
-                                    con->puts(  "  <DIR>\r\n");
-                                    totalDirs++;
-                                } else {
-                                    con->printf("        %8'u Bytes\r\n", child.getSize());
-                                    totalFiles++;
-                                    totalSize += child.getSize();
-                                }
-                            }
-                            con->printf("%5'u File(s)        %8'u Bytes\n", totalFiles, totalSize);
-                            con->printf("%5'u Dir(s)\n", totalDirs);
-                        } else if (argc > 1){
-                            con->printf("Path '%s' is not a directory\n", argv[1]);
-                        }
-                    } else if (!strcmp(argv[0], "cat")) {
-                        if (argc > 1) {
-                            for (int i = 1; i < argc; i++) {
-                                FsNode node(&fs);
-                                if (argv[i][0] == '/') {
-                                    node = fs.get(argv[i], fsErr);
-                                } else {
-                                    node = pwd.get(argv[i], fsErr);
-                                }
-                                if (fsErr) {
-                                    con->printf("err: %d\n", fsErr);
-                                } else if (node.isDirectory()){
-                                    con->printf("cat: '%s' is a directory\n", argv[i]);
-                                } else {
-                                    char buffer[32] = { };
-                                    while (true) {
-                                        size_t readBytes = node.read(buffer, 32, fsErr);
-                                        if (fsErr && fsErr != FS_EOF) {
-                                            con->printf("err: %d\n", fsErr);
-                                            break;
-                                        } else {
-                                            for (size_t j = 0; j < readBytes; j++)
-                                                con->putch(buffer[j]);
-                                            if (fsErr == FS_EOF)
-                                                break;
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            con->printf("usage: cat FILE...\n");
-                        }
-                    } else {
-                        con->printf("No such command `%s'\n", argv[0]);
-                    }
-                }
-                con->printf("%s:%s> ", fs.getVolumeLabel(), pwdPath);
-            } else if (c == '\b') {
-                if (cmdInputI) {
-                    cmdInputI--;
-                    con->putch(' ');
-                    con->putch((char)c);
-                } else {
-                    con->putch(' ');
-                }
-            } else if (c == '\x17') { // ^W
-            } else {
-                if (cmdInputI < 255)
-                    cmdInput[cmdInputI++] = (char)c;
-            }
-        } else {
-            if (z % 10 == 0) {
-                // Blink LED at pin 13.
-                if (z % 20 == 0)
-                    PIOB->PIO_SODR = PIO_PB27;
-                else
-                    PIOB->PIO_CODR = PIO_PB27;
-            }
-
-            z++;
-            Sleep(10);
-        }
-    }
+    runShell(*con, fs);
 
     return 0;
 }
